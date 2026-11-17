@@ -140,7 +140,7 @@ function refreshProjectionConsole() {
   const doc = getDisplayDocument();
   const connected = !!doc?.getElementById('title-view');
   const blackedOut = getProjectionWindows().length > 0 && projectionBlackedOut;
-  const names = { title: '基本情報', hymn: '讃美歌', bible: '聖書', capture: '画面キャプチャ' };
+  const names = { title: '基本情報', hymn: '讃美歌', bible: '聖書', capture: '画面キャプチャ', slides: 'スライド' };
   const status = document.getElementById('projection-status');
   const preview = document.getElementById('projection-preview');
   const frame = document.getElementById('projection-preview-frame');
@@ -162,6 +162,7 @@ function refreshProjectionConsole() {
   Object.keys(names).forEach(mode => {
     const selected = connected && mode === currentMode;
     const button = document.getElementById(`btn-mode-${mode}`);
+    if (!button) return;
     button.classList.toggle('primary', selected);
     button.setAttribute('aria-pressed', String(selected));
   });

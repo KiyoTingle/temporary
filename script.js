@@ -56,6 +56,7 @@ function initializeProjectionWindow(win) {
     else showLyricsVerse(projectedHymnVerse, win);
   }
   switchScreen(currentMode, win);
+  window.SlideProjection?.render(win);
   win.document.body.classList.toggle('is-blacked-out', projectionBlackedOut);
   if (win === display_win) { bindDisplayFullscreenEvents(); bindProjectionPreview(); }
   refreshProjectionConsole();
@@ -2300,7 +2301,8 @@ function bindDisplayFullscreenEvents() {
 
 function openwindow() {
   const openProjection = (name) => {
-    const win = window.open('./popwindow/display.html?v=13', name,
+    // Calls can originate in the slide editor. Resolve against this app, not its caller.
+    const win = window.open(new URL('./popwindow/display.html?v=14', window.location.href).href, name,
       'width=1500,height=800,scrollbars=yes,resizable=yes');
     if (win) win.addEventListener('load', () => initializeProjectionWindow(win));
     return win;
@@ -2933,10 +2935,10 @@ function switchScreen(mode, targetWindow) {
   currentMode = mode;
   updateModeUI(mode);
   const dBody = targetWindow.document.body;
-  dBody.classList.remove("bible-mode", "title-mode", "hymn-mode", "capture-mode");
+  dBody.classList.remove("bible-mode", "title-mode", "hymn-mode", "capture-mode", "slides-mode");
   dBody.classList.add(mode + "-mode");
 
-  const views = ["bible-view", "title-view", "hymn-view", "capture-view"];
+  const views = ["bible-view", "title-view", "hymn-view", "capture-view", "slides-view"];
   views.forEach((v) => {
     const el = targetWindow.document.getElementById(v);
     if (el) el.style.display = "none";
@@ -2947,7 +2949,7 @@ function switchScreen(mode, targetWindow) {
 
 function checkwindow(mode) {
   const targetMode = ({ title_win: 'title', hymn_win: 'hymn', bible_win: 'bible' })[mode] || mode;
-  if (!['title', 'hymn', 'bible', 'capture'].includes(targetMode)) return;
+  if (!['title', 'hymn', 'bible', 'capture', 'slides'].includes(targetMode)) return;
   if (targetMode === 'capture' && !SCREEN_CAPTURE_ENABLED) return;
   currentMode = targetMode;
   openwindow();
@@ -2956,6 +2958,7 @@ function checkwindow(mode) {
     applyLogoSettings();
     commit();
     renderProjectedBible();
+    if (targetMode === 'slides') getProjectionWindows().forEach(win => window.SlideProjection?.render(win));
     if (targetMode === 'hymn' && currentTitleInfo) {
       getProjectionWindows().forEach(win => {
         if (!win.document.getElementById('h_output')?.innerHTML) {

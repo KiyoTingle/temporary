@@ -440,11 +440,25 @@
         <div id="h_output"></div>
     </div>
 
+    <div id="slides-view" style="display:none"><div class="slide-canvas"></div></div>
+
     <div id="capture-view">
         <video id="capture-video" autoplay playsinline></video>
     </div>
 
+    <link rel="stylesheet" href="../slides/canvas.css?v=1">
+    <style>
+        #slides-view { position:fixed; inset:0; overflow:hidden; background:#000; font-weight:400; }
+        body.slides-mode { background:#000; }
+        body.slides-mode #common-logo, body.slides-mode #b_footer_ticker { display:none !important; }
+    </style>
     <script>
+        document.addEventListener('keydown', event => {
+            if (!document.body.classList.contains('slides-mode')) return;
+            const direction = ['ArrowRight','ArrowDown','PageDown',' '].includes(event.key) ? 1 : ['ArrowLeft','ArrowUp','PageUp'].includes(event.key) ? -1 : 0;
+            if (direction) { event.preventDefault(); window.opener?.SlideProjection?.navigate(direction); }
+            if (event.key.toLowerCase() === 'b') window.opener?.SlideProjection?.blackout();
+        });
         // 文字サイズ自動調整
         function fitHeader() {
             const header = document.getElementById('b_header');

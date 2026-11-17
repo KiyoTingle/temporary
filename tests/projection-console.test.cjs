@@ -11,7 +11,7 @@ function fixture() {
     getElementById(id) { if (!elements.has(id)) elements.set(id, makeElement()); return elements.get(id); },
     createElement: makeElement, querySelectorAll: () => [], querySelector: () => makeElement() };
   const context = vm.createContext({ document, window: { location: { href: 'https://example.test/app/' }, addEventListener() {} }, console,
-    Event: class { constructor(type) { this.type = type; } }, AbortController,
+    Event: class { constructor(type) { this.type = type; } }, AbortController, URL,
     setTimeout() {}, clearTimeout() {}, localStorage: { getItem(key) { return storage.get(key) ?? null; }, setItem(key, value) { storage.set(key, value); } } });
   for (const file of ['bible-pages.js', 'script.js', 'projection-console.js']) vm.runInContext(fs.readFileSync(file, 'utf8'), context);
   const run = code => vm.runInContext(code, context);

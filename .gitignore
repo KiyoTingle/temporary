@@ -9,6 +9,10 @@ bible-pages.lock
 /tests/*
 !/tests/bible-performance.test.cjs
 !/tests/bible-performance.bench.cjs
+!/tests/slides.test.cjs
+!/tests/slides.browser.cjs
 !/tests/helpers/
 /tests/helpers/*
 !/tests/helpers/bible-fixture.cjs
+node_modules/
+test-results/

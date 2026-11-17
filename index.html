@@ -273,11 +273,13 @@
           <button id="btn-mode-title" onclick="checkwindow('title');" class="display-btn" aria-pressed="false">基本情報 表示</button>
           <button id="btn-mode-hymn" onclick="checkwindow('hymn');" class="display-btn" aria-pressed="false">讃美歌 表示</button>
           <button id="btn-mode-bible" onclick="checkwindow('bible');" class="display-btn" aria-pressed="false">聖書 表示</button>
+          <button id="btn-mode-slides" onclick="SlideProjection.show();" class="display-btn" aria-pressed="false">スライド 表示</button>
           <button id="btn-mode-capture" hidden disabled onclick="startCapture();" class="display-btn" aria-pressed="false">画面キャプチャ 表示</button>
         </div>
         <button id="blackout-toggle" class="blackout-btn" type="button" onclick="toggleBlackout();" aria-pressed="false" disabled>黒画面にする</button>
       </div>
       <div class="projection-toolbar-secondary">
+        <button type="button" class="secondary-btn" onclick="SlideProjection.openEditor();">スライド編集</button>
         <div class="classic-only classic-settings-copy"><strong>別窓表示設定</strong><span>文字サイズ、ロゴ、色を調整</span></div>
         <button type="button" id="fullscreen-toggle" class="fullscreen-toggle">投影画面を全画面に</button>
         <button type="button" class="secondary-btn" onclick="openDisplaySettings();">投影画面の設定</button>
@@ -664,8 +666,10 @@
 
   <script src="./worship.js"></script>
   <script src="./bible-pages.js?v=11"></script>
-  <script src="./script.js?v=16"></script>
-  <script src="./projection-console.js?v=10"></script>
+  <script src="./script.js?v=17"></script>
+  <script src="./projection-console.js?v=11"></script>
+  <script src="./slides/core.js?v=1"></script>
+  <script src="./slide-projection.js?v=1"></script>
   <!-- 更新通知バナー -->
   <div id="update-banner" class="update-banner" style="display:none;">
     <span>🔄 新しいバージョンが利用可能です</span>

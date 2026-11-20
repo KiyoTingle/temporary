@@ -76,9 +76,12 @@ function commit(mutator, { keepEditing = false } = {}) {
 }
 function fit() {
   const value = $('zoom').value;
-  scale = value === 'fit' ? Math.max(.08, Math.min((stage.clientWidth - 70) / C.WIDTH, (stage.clientHeight - 50) / C.HEIGHT)) : Number(value);
-  space.style.width = `${Math.max(stage.clientWidth, C.WIDTH * scale + 80)}px`;
-  space.style.height = `${Math.max(stage.clientHeight, C.HEIGHT * scale + 65)}px`;
+  const fitting = value === 'fit';
+  // Remove scrollbars before measuring. Classic Windows scrollbars change clientWidth/Height.
+  stage.classList.toggle('is-fit', fitting);
+  scale = fitting ? Math.max(.08, Math.min((stage.clientWidth - 70) / C.WIDTH, (stage.clientHeight - 50) / C.HEIGHT)) : Number(value);
+  space.style.width = fitting ? '100%' : `${C.WIDTH * scale + 70}px`;
+  space.style.height = fitting ? '100%' : `${C.HEIGHT * scale + 50}px`;
   canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
   moveable.zoom = 1 / scale;
   moveable.updateRect();
@@ -315,6 +318,7 @@ function present() {
   if (!standaloneWindow || standaloneWindow.closed) {
     standaloneWindow = window.open('./present.html?v=1', 'assembly-slides-projector', 'width=1280,height=720,resizable=yes');
     if (!standaloneWindow) return notify('投影画面を開けません。ポップアップを許可してください。', true);
+    standaloneWindow.focus();
     standaloneWindow.addEventListener('load', () => { standaloneWindow.SlideShow?.apply(published); });
   } else standaloneWindow.SlideShow?.apply(published);
   $('projection-state').textContent = `${current + 1}枚目を投影へ反映しました`;

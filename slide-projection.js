@@ -15,19 +15,21 @@
     }
   }
   function openEditor() {
-    editorWindow = window.open(new URL('./slides/index.html', window.location.href).href, 'assembly-slide-editor', 'width=1500,height=950,resizable=yes,scrollbars=yes');
+    if (!editorWindow || editorWindow.closed) {
+      editorWindow = window.open(new URL('./slides/index.html', window.location.href).href, 'assembly-slide-editor', 'width=1500,height=950,resizable=yes,scrollbars=yes');
+    }
     if (editorWindow) editorWindow.focus();
     else showToast('スライド編集画面を開けません。ポップアップを許可してください。', 'error');
   }
-  function show() {
+  function show(focusExisting = true) {
     if (!snapshot) { showToast('スライド編集画面で「投影へ反映」を押してください'); openEditor(); return; }
-    checkwindow('slides');
+    checkwindow('slides', focusExisting);
     getProjectionWindows().forEach(render); refreshProjectionConsole();
   }
   function receive(value) {
     const deck = SlideCore.validate(value.deck);
     snapshot = { deck, index: Math.floor(SlideCore.number(value.index, 0, 0, deck.slides.length - 1)) };
-    show();
+    show(false);
   }
   function navigate(delta) {
     if (!snapshot || currentMode !== 'slides') return;

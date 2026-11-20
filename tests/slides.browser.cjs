@@ -31,7 +31,7 @@ async function run() {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     base = `http://127.0.0.1:${server.address().port}/assembly/`;
   }
-  const browser = activeBrowser = await chromium.launch({ executablePath, headless: true });
+  const browser = activeBrowser = await chromium.launch({ executablePath, headless: true, ignoreDefaultArgs: ['--hide-scrollbars'] });
   const context = await browser.newContext({ viewport: { width: 1500, height: 1000 }, serviceWorkers: 'block', acceptDownloads: true });
   context.setDefaultTimeout(10000);
   context.on('page', page => { page.on('pageerror', error => errors.push(`${page.url()}: ${error.stack || error.message}`)); page.on('dialog', dialog => dialog.accept()); });
@@ -46,10 +46,40 @@ async function run() {
   assert.equal(context.pages().length, 1, 'startup never opens a projector');
   const editorPromise = context.waitForEvent('page'); await main.getByRole('button', { name: 'スライド編集', exact: true }).click(); const editor = activeEditor = await editorPromise;
   await editor.waitForFunction(() => !document.querySelector('#workspace').inert);
+  // Classic scrollbars consume layout space, as in the Windows recording.
+  await editor.addStyleTag({ content: '#stage-scroll::-webkit-scrollbar { width: 17px; height: 17px; }' });
+  await editor.setViewportSize({ width: 1490, height: 950 });
+  await editor.locator('#canvas > .slide-text').first().click();
+  await editor.locator('#zoom').selectOption('1.5');
+  const stage = editor.locator('#stage-scroll');
+  assert(await stage.evaluate(n => n.scrollWidth > n.clientWidth && n.scrollHeight > n.clientHeight));
+  await stage.evaluate(n => n.scrollTo(180, 120));
+  await editor.locator('#zoom').selectOption('fit');
+  for (const viewport of [{ width: 1490, height: 950 }, { width: 1280, height: 720 }]) {
+    await editor.setViewportSize(viewport);
+    const bounds = await stage.evaluate(async n => {
+      const samples = [];
+      for (let i = 0; i < 12; i++) {
+        await new Promise(requestAnimationFrame);
+        const slide = n.querySelector('#canvas').getBoundingClientRect();
+        samples.push([n.clientWidth, n.clientHeight, slide.x, slide.y, slide.width, slide.height]);
+      }
+      return { samples, viewport: [n.offsetWidth, n.offsetHeight], scroll: [n.scrollLeft, n.scrollTop] };
+    });
+    for (const sample of bounds.samples.slice(2)) {
+      assert.deepEqual(sample.slice(0, 2), bounds.viewport, 'fit should reserve no scrollbars');
+      assert.deepEqual(sample, bounds.samples.at(-1), 'fit must keep the selected slide stationary');
+    }
+    assert.deepEqual(bounds.scroll, [0, 0]);
+  }
+  await editor.setViewportSize({ width: 1500, height: 1000 });
   await editor.screenshot({ path: 'test-results/slides-editor-initial.png', fullPage: true });
   const title = editor.locator('#canvas > .slide-text').first();
   await title.dblclick();
   await editor.locator('#canvas .tiptap').fill('恵みによって歩む');
+  await main.getByRole('button', { name: 'スライド編集', exact: true }).click();
+  assert.equal(context.pages().length, 2);
+  assert.equal(await editor.locator('#canvas .tiptap').textContent(), '恵みによって歩む');
   // Apply a partial mark to the last three characters using actual editor selection.
   await editor.keyboard.press('End'); await editor.keyboard.down('Shift'); for (let i = 0; i < 3; i++) await editor.keyboard.press('ArrowLeft'); await editor.keyboard.up('Shift');
   await editor.waitForFunction(() => window.getSelection().toString() === 'て歩む');

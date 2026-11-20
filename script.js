@@ -2299,17 +2299,26 @@ function bindDisplayFullscreenEvents() {
   doc.__fullscreenEventsBound = true;
 }
 
-function openwindow() {
+function openwindow(focusExisting = false) {
+  let openedWindow = null;
   const openProjection = (name) => {
     // Calls can originate in the slide editor. Resolve against this app, not its caller.
     const win = window.open(new URL('./popwindow/display.html?v=14', window.location.href).href, name,
       'width=1500,height=800,scrollbars=yes,resizable=yes');
-    if (win) win.addEventListener('load', () => initializeProjectionWindow(win));
+    if (win) {
+      openedWindow = win;
+      win.addEventListener('load', () => initializeProjectionWindow(win));
+    }
     return win;
   };
   if (!display_win || display_win.closed) display_win = openProjection('display');
   if (dualProjection && (!chineseDisplayWindow || chineseDisplayWindow.closed)) {
     chineseDisplayWindow = openProjection('display-chinese');
+  }
+  if (openedWindow) openedWindow.focus();
+  else if (focusExisting) {
+    chineseDisplayWindow?.focus();
+    display_win?.focus();
   }
   getProjectionWindows().forEach(applyProjectionLanguage);
   updateFullscreenButton();
@@ -2947,12 +2956,12 @@ function switchScreen(mode, targetWindow) {
   if (viewEl) viewEl.style.display = "";
 }
 
-function checkwindow(mode) {
+function checkwindow(mode, focusExisting = false) {
   const targetMode = ({ title_win: 'title', hymn_win: 'hymn', bible_win: 'bible' })[mode] || mode;
   if (!['title', 'hymn', 'bible', 'capture', 'slides'].includes(targetMode)) return;
   if (targetMode === 'capture' && !SCREEN_CAPTURE_ENABLED) return;
   currentMode = targetMode;
-  openwindow();
+  openwindow(focusExisting);
   const show = () => {
     switchScreen(targetMode);
     applyLogoSettings();

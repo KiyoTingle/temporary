@@ -4,8 +4,8 @@
 
 ## 他言語版 / Other Languages
 
-- [English / Chinese (Simplified)](README_ZH_CN.md)
-- [Chinese (Traditional)](README_ZH_TW.md)
+- [Chinese (Simplified)](docs/README_ZH_CN.md)
+- [Chinese (Traditional)](docs/README_ZH_TW.md)
 
 ## 主な機能
 
@@ -125,34 +125,6 @@ node tests/bible-performance.bench.cjs
 ```
 
 ベンチマークは索引作成を含む初期読み込み時間と、改善前後の聖句参照・全文検索の時間（ウォームアップ後7回の中央値）を出力します。Node.jsでの処理時間であり、ブラウザの通信・描画時間は含みません。
-
----
-
-# 歌詞データ仕様
-
-現在のフロントエンドはローカルの `lyrics/*.txt` を直接読み込まず、歌詞 API のレスポンスを利用します。
-
-### 1. 取得元
-
-- **API**: `https://tjckousei.com/hymn/api.php?action=get_all_lyrics`
-- **レスポンス**: `{ success: true, data: { "1.txt": "...", "124甲.txt": "..." } }` の形式を想定します。
-- **キャッシュ**: 取得した `data` はブラウザの `localStorage` に保存されます。
-
-### 2. 書式
-
-各曲の本文は従来と同じく、節ラベルを角括弧で囲みます。
-
-```text
-[1]
-歌詞の本文
-[2]
-歌詞の本文
-```
-
-### 3. ルビ指定
-
-漢字の後に `(読み)` を記述します。
-例: `栄光(えいこう)` → 「栄光」の上に「えいこう」を表示。
 
 ## 聖書のページ番号
 

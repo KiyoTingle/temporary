@@ -7,7 +7,7 @@
   <title>スライドスタジオ | 集会管理</title>
   <link rel="icon" href="../tjc.png">
   <link rel="stylesheet" href="./canvas.css?v=1">
-  <link rel="stylesheet" href="./editor.css?v=1">
+  <link rel="stylesheet" href="./editor.css?v=2">
 </head>
 <body inert>
   <header class="studio-header">
@@ -89,6 +89,6 @@
   <input type="file" id="image-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
   <dialog id="bible-dialog"><form method="dialog"><h2>聖句を挿入</h2><p>集会管理で選択中の聖句を取り込めます。任意の本文も入力できます。</p><button type="button" data-action="get-current-bible">選択中の聖句を取得</button><label>聖書箇所<input id="bible-reference" placeholder="ヨハネによる福音書 3:16" maxlength="200"></label><label>日本語<textarea id="bible-japanese" rows="5" maxlength="10000"></textarea></label><label>中国語（任意）<textarea id="bible-chinese" rows="5" maxlength="10000"></textarea></label><div class="dialog-actions"><button value="cancel">キャンセル</button><button type="button" data-action="confirm-bible" class="present-button">新しいスライドに挿入</button></div></form></dialog>
   <dialog id="new-dialog"><form method="dialog"><h2>新しい資料を作成</h2><p>現在の資料を残すには、先に「資料を保存」でファイルへ保存してください。このブラウザの自動保存は新しい資料に置き換わります。</p><div class="dialog-actions"><button value="cancel">キャンセル</button><button type="button" data-action="confirm-new" class="present-button">新規作成</button></div></form></dialog>
-  <script src="./editor.bundle.js?v=1" defer></script>
+  <script src="./editor.bundle.js?v=2" defer></script>
 </body>
 </html>

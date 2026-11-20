@@ -228,7 +228,7 @@ function dualFixture() {
           return nodes.get(id);
         }
       };
-      return { document: doc, closed: false, close() { this.closed = true; }, addEventListener() {} };
+      return { document: doc, closed: false, focusCount: 0, focus() { this.focusCount++; }, close() { this.closed = true; }, addEventListener() {} };
     }
     display_win = makeProjection(); chineseDisplayWindow = makeProjection(); dualProjection = true;
     refreshProjectionConsole = () => {}; bindProjectionPreview = () => {}; bindDisplayFullscreenEvents = () => {};
@@ -292,6 +292,12 @@ test('blocked second popup can be retried without reopening the first, and saved
   run(`window.open = () => { opens++; return makeProjection(); }; openwindow();`);
   assert.equal(run('opens'), 2);
   assert.equal(run('getProjectionWindows().length'), 2);
+  assert.equal(run('chineseDisplayWindow.focusCount'), 1);
+  assert.equal(run('display_win.focusCount'), 0);
+  run('openwindow(true)');
+  assert.equal(run('opens'), 2);
+  assert.equal(run('chineseDisplayWindow.focusCount'), 2);
+  assert.equal(run('display_win.focusCount'), 1);
   run(`localStorage.getItem = () => { throw Error('unavailable'); }; loadProjectionSettings();`);
   assert.equal(run('dualProjection'), false);
 });

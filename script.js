@@ -158,7 +158,7 @@ let servicerList = {};
 let currentLyricsSections = [];
 let currentTitleInfo = null;
 const HYMN_RECOMMENDATION_ENDPOINT = "https://tjckousei.com/api/v1/hymn-recommendations/index.php";
-const LYRICS_API_URL = "https://tjckousei.com/hymn/api.php?action=get_all_lyrics";
+const LYRICS_API_URL = "https://hymn.tjckousei.com/api.php?action=get_all_lyrics";
 const LYRICS_CACHE_KEY = "hymnLyricsData";
 const LYRICS_CACHE_UPDATED_KEY = "hymnLyricsUpdatedAt";
 const fallbackHymnRecommendationGroups = [

@@ -6,6 +6,7 @@ let projectionObserver = null;
 let observedProjectionDocument = null;
 let previewTimer = null;
 let previewMarkup = '';
+let previewDirty = true;
 
 function readInfoInputs() {
   return Object.fromEntries(infoFields.map(key => [key, document.getElementById(key).value]));
@@ -127,7 +128,9 @@ function bindProjectionPreview() {
   projectionObserver?.disconnect();
   observedProjectionDocument = doc;
   previewMarkup = '';
+  previewDirty = true;
   projectionObserver = new MutationObserver(() => {
+    previewDirty = true;
     clearTimeout(previewTimer);
     previewTimer = setTimeout(refreshProjectionConsole, 80);
   });
@@ -199,30 +202,35 @@ function refreshProjectionConsole() {
   document.getElementById('projection-description').textContent = blackedOut
     ? `投影を一時停止しています。再開すると「${names[currentMode]}」を表示します。` : summary;
   if (!frame.hidden) {
-    // Mirror rendered DOM and computed font sizes. Scripts never run in this sandboxed preview.
-    const head = Array.from(doc.head.querySelectorAll('style, link[rel="stylesheet"]')).map(el => el.outerHTML).join('');
-    const body = doc.body.cloneNode(true);
-    body.querySelectorAll('script, iframe, object, embed').forEach(el => el.remove());
-    body.querySelectorAll('*').forEach(el => {
-      Array.from(el.attributes).filter(attr => attr.name.startsWith('on')).forEach(attr => el.removeAttribute(attr.name));
-    });
-    const rootStyle = doc.documentElement.getAttribute('style') || '';
-    const markup = head + rootStyle + doc.documentElement.dataset.bibleLanguage + body.outerHTML;
-    const target = frame.contentDocument;
-    if (target && markup !== previewMarkup) {
-      previewMarkup = markup;
-      target.documentElement.lang = doc.documentElement.lang;
-      target.documentElement.dataset.bibleLanguage = doc.documentElement.dataset.bibleLanguage || 'both';
-      target.documentElement.setAttribute('style', rootStyle);
-      if (target.head.dataset.previewHead !== head) {
-        target.head.replaceChildren();
-        const base = target.createElement('base');
-        base.href = doc.baseURI;
-        target.head.append(base);
-        doc.head.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => target.head.append(target.importNode(el, true)));
-        target.head.dataset.previewHead = head;
+    // A synchronous refresh can precede delivery of the observer callback.
+    if (projectionObserver?.takeRecords().length) previewDirty = true;
+    if (previewDirty || doc !== observedProjectionDocument) {
+      // Mirror rendered DOM and computed font sizes. Scripts never run in this sandboxed preview.
+      const head = Array.from(doc.head.querySelectorAll('style, link[rel="stylesheet"]')).map(el => el.outerHTML).join('');
+      const body = doc.body.cloneNode(true);
+      body.querySelectorAll('script, iframe, object, embed').forEach(el => el.remove());
+      body.querySelectorAll('*').forEach(el => {
+        Array.from(el.attributes).filter(attr => attr.name.startsWith('on')).forEach(attr => el.removeAttribute(attr.name));
+      });
+      const rootStyle = doc.documentElement.getAttribute('style') || '';
+      const markup = head + rootStyle + doc.documentElement.dataset.bibleLanguage + body.outerHTML;
+      const target = frame.contentDocument;
+      if (target && markup !== previewMarkup) {
+        previewMarkup = markup;
+        target.documentElement.lang = doc.documentElement.lang;
+        target.documentElement.dataset.bibleLanguage = doc.documentElement.dataset.bibleLanguage || 'both';
+        target.documentElement.setAttribute('style', rootStyle);
+        if (target.head.dataset.previewHead !== head) {
+          target.head.replaceChildren();
+          const base = target.createElement('base');
+          base.href = doc.baseURI;
+          target.head.append(base);
+          doc.head.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => target.head.append(target.importNode(el, true)));
+          target.head.dataset.previewHead = head;
+        }
+        target.body.replaceWith(target.importNode(body, true));
       }
-      target.body.replaceWith(target.importNode(body, true));
+      previewDirty = !target;
     }
     frame.style.width = `${width}px`;
     frame.style.height = `${height}px`;
@@ -231,7 +239,7 @@ function refreshProjectionConsole() {
 }
 
 function initProjectionConsole() {
-  document.getElementById('projection-preview-frame').addEventListener('load', () => { previewMarkup = ''; refreshProjectionConsole(); });
+  document.getElementById('projection-preview-frame').addEventListener('load', () => { previewDirty = true; previewMarkup = ''; refreshProjectionConsole(); });
   setUiStyle(getSavedUiStyle(), { persist: false });
   updateLiveInfo();
   loadLastUpdated();

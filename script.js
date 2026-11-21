@@ -1357,18 +1357,17 @@ async function loadInitialData() {
         }
       }
     }
-    updateProgress(40, "聖書データを読み込んでいます...");
-    const bibleData = await loadCSVAsync("./Data.csv");
+    updateProgress(40, "聖書と讃美歌のデータを読み込んでいます...");
+    const [bibleData, hymnData] = await Promise.all([
+      loadCSVAsync("./Data.csv"),
+      loadCSVAsync("./hymn.csv")
+    ]);
     convertbibleCSVtoArray(bibleData);
-    await loadBiblePageData();
-    updateProgress(75, "讃美歌データを読み込んでいます...");
-    const hymnData = await loadCSVAsync("./hymn.csv");
     converthymnCSVtoArray(hymnData);
-    await loadHymnRecommendations();
+    void loadHymnRecommendations();
+    await loadBiblePageData();
     updateProgress(100, "準備完了！");
-    setTimeout(() => {
-      if (overlay) overlay.classList.add("hidden");
-    }, 800);
+    if (overlay) overlay.classList.add("hidden");
   } catch (error) {
     console.error(error);
     updateProgress(100, "エラーが発生しました");

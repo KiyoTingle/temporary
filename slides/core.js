@@ -49,8 +49,18 @@
     if (result?.type !== 'doc') throw new Error('文字データの形式が正しくありません。');
     return result;
   }
+  const isTextShape = type => type === 'rect' || type === 'ellipse';
+  const supportsText = type => type === 'text' || isTextShape(type);
+  function shapeText() {
+    const doc = textDoc();
+    doc.content[0].attrs = { textAlign: 'center' };
+    return doc;
+  }
   function element(type, extra = {}) {
-    return { id: id(), type, x: 100, y: 100, width: type === 'text' ? 700 : 320, height: type === 'text' ? 160 : 220, rotation: 0, opacity: 1, fontSize: 44, fontFamily: 'Yu Gothic', color: '#172b36', fill: '#d9eee8', lineHeight: 1.5, ...extra };
+    return { id: id(), type, x: 100, y: 100, width: type === 'text' ? 700 : 320, height: type === 'text' ? 160 : 220, rotation: 0, opacity: 1, fontSize: 44, fontFamily: 'Yu Gothic', color: '#172b36', fill: '#d9eee8', lineHeight: 1.5,
+      ...(supportsText(type) ? { verticalAlign: type === 'text' ? 'top' : 'middle' } : {}),
+      ...(isTextShape(type) ? { content: shapeText(), stroke: '#15574b', strokeWidth: 0, noFill: false } : {}),
+      ...extra };
   }
   function slide(name = 'スライド') { return { id: id(), name, background: '#ffffff', elements: [], notes: '' }; }
   function deck(name = '新しいプレゼンテーション') {
@@ -66,7 +76,8 @@
       if (!s || !Array.isArray(s.elements) || s.elements.length > 200) throw new Error('1枚に配置できる要素は200個までです。');
       return { id: unique(s.id), name: String(s.name || 'スライド').slice(0, 200), background: color(s.background, '#ffffff'), ...(s.backgroundImage ? { backgroundImage: image(s.backgroundImage) } : {}), notes: String(s.notes || '').slice(0, 50000), elements: s.elements.map(e => {
         if (!e || !['text', 'rect', 'ellipse', 'line', 'image'].includes(e.type)) throw new Error('対応していない要素が含まれています。');
-        return element(e.type, { id: unique(e.id), x: number(e.x, 100, -2560, 2560), y: number(e.y, 100, -1440, 1440), width: number(e.width, 320, e.type === 'text' ? 20 : 1, 5120), height: number(e.height, 160, e.type === 'text' ? 8 : 1, 2880), rotation: number(e.rotation, 0, -360, 360), opacity: number(e.opacity, 1, 0, 1), fontSize: number(e.fontSize, 44, 8, 240), fontFamily: fonts.includes(e.fontFamily) ? e.fontFamily : 'Yu Gothic', color: color(e.color), fill: color(e.fill, '#d9eee8'), lineHeight: number(e.lineHeight, 1.5, 0.8, 3), ...(typeof e.group === 'string' ? { group: e.group.slice(0, 100) } : {}), ...(e.type === 'text' ? { content: cleanDoc(e.content || textDoc()) } : {}), ...(e.type === 'image' ? { src: image(e.src), fit: e.fit === 'cover' ? 'cover' : 'contain' } : {}) });
+        return element(e.type, { id: unique(e.id), x: number(e.x, 100, -2560, 2560), y: number(e.y, 100, -1440, 1440), width: number(e.width, 320, e.type === 'text' ? 20 : 1, 5120), height: number(e.height, 160, e.type === 'text' ? 8 : 1, 2880), rotation: number(e.rotation, 0, -360, 360), opacity: number(e.opacity, 1, 0, 1), fontSize: number(e.fontSize, 44, 8, 240), fontFamily: fonts.includes(e.fontFamily) ? e.fontFamily : 'Yu Gothic', color: color(e.color), fill: color(e.fill, '#d9eee8'), lineHeight: number(e.lineHeight, 1.5, 0.8, 3), ...(typeof e.group === 'string' ? { group: e.group.slice(0, 100) } : {}), ...(supportsText(e.type) ? { content: cleanDoc(e.content || (isTextShape(e.type) ? shapeText() : textDoc())), verticalAlign: ['top', 'middle', 'bottom'].includes(e.verticalAlign) ? e.verticalAlign : isTextShape(e.type) ? 'middle' : 'top' } : {}),
+          ...(isTextShape(e.type) ? { stroke: color(e.stroke, '#15574b'), strokeWidth: number(e.strokeWidth, 0, 0, 24), noFill: e.noFill === true } : {}), ...(e.type === 'image' ? { src: image(e.src), fit: e.fit === 'cover' ? 'cover' : 'contain' } : {}) });
       }) };
     }) };
   }
@@ -104,7 +115,14 @@
     for (const e of s.elements) {
       const node = d.createElement('div'); node.className = `slide-element slide-${e.type}`; node.dataset.elementId = e.id;
       styleElement(node, e);
-      if (e.type === 'text') { const body = d.createElement('div'); body.className = 'slide-text-body'; renderText(e.content, body); node.append(body); }
+      if (isTextShape(e.type)) {
+        node.style.backgroundColor = e.noFill ? 'transparent' : e.fill;
+        node.style.border = `${e.strokeWidth}px solid ${e.stroke}`;
+      }
+      if (supportsText(e.type)) {
+        node.classList.add('slide-rich-text');
+        node.dataset.verticalAlign = e.verticalAlign;
+        const body = d.createElement('div'); body.className = 'slide-text-body'; renderText(e.content, body); node.append(body); }
       else if (e.type === 'image') { const img = d.createElement('img'); img.src = e.src; img.alt = ''; img.draggable = false; img.style.objectFit = e.fit; node.append(img); }
       else node.style.backgroundColor = e.fill;
       canvas.append(node);
@@ -123,7 +141,7 @@
     get canUndo() { return this.index > 0; }
     get canRedo() { return this.index < this.entries.length - 1; }
   }
-  const api = { WIDTH, HEIGHT, fonts, clone, id, number, color, image, textDoc, cleanDoc, element, slide, deck, validate, renderSlide, renderText, styleElement, fitCanvas, History };
+  const api = { WIDTH, HEIGHT, fonts, clone, id, number, color, image, textDoc, cleanDoc, isTextShape, supportsText, element, slide, deck, validate, renderSlide, renderText, styleElement, fitCanvas, History };
   root.SlideCore = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(globalThis);

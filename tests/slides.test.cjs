@@ -82,3 +82,20 @@ test('shared renderer escapes text, strips marks on validation, and preserves pa
   assert.equal(host.childNodes[0].childNodes[0].childNodes[0].tag, '#text');
   assert.equal(host.childNodes[0].childNodes[0].childNodes[0].text, '<script>alert(1)</script>');
 });
+
+test('legacy shapes gain editable text while imported shape styles are bounded', () => {
+  const deck = C.deck();
+  deck.slides[0].elements = [
+    { type: 'rect', fill: '#123456' },
+    { type: 'ellipse', strokeWidth: 200, stroke: 'invalid', verticalAlign: 'bottom', content: C.textDoc('集会') }
+  ];
+  const [rect, ellipse] = C.validate(deck).slides[0].elements;
+  assert.equal(rect.strokeWidth, 0);
+  assert.equal(rect.noFill, false);
+  assert.equal(rect.fill, '#123456');
+  assert.equal(rect.content.content[0].attrs.textAlign, 'center');
+  assert.equal(ellipse.strokeWidth, 24);
+  assert.equal(ellipse.stroke, '#15574b');
+  assert.equal(ellipse.verticalAlign, 'bottom');
+  assert.equal(ellipse.content.content[0].content[0].text, '集会');
+});

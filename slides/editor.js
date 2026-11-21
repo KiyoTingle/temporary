@@ -12,6 +12,7 @@ const $ = id => document.getElementById(id);
 let deck = C.deck(), current = 0, selected = new Set(), history;
 let editor = null, editingId = null, textTimer, saveTimer, toastTimer;
 let storage, revision = 0, savedRevision = -1, saveQueue = Promise.resolve(), ready = false;
+let copiedStyle = null;
 let clipboard = null, imagePurpose = 'element', draggedSlide = null, scale = 1, gesture = false;
 let standaloneWindow = null, published = null;
 const canvas = $('canvas'), stage = $('stage-scroll'), space = $('stage-space');
@@ -87,7 +88,9 @@ function fit() {
   moveable.updateRect();
 }
 function renderRail() {
-  const list = $('slide-list'); list.replaceChildren();
+  const list = $('slide-list');
+  const hadFocus = list.contains(document.activeElement);
+  list.replaceChildren();
   deck.slides.forEach((s, index) => {
     const item = document.createElement('div'); item.className = `slide-item${index === current ? ' active' : ''}`; item.draggable = true; item.dataset.slideId = s.id;
     item.tabIndex = 0; item.setAttribute('role', 'button'); item.setAttribute('aria-label', `${index + 1}. ${s.name}`); item.setAttribute('aria-pressed', String(index === current));
@@ -97,8 +100,27 @@ function renderRail() {
     item.append(number, thumb, label); list.append(item);
     // Scale thumbnails after insertion, without constructing editor instances.
     miniature.style.transform = `translate(-50%, -50%) scale(${(thumb.clientWidth || 150) / C.WIDTH})`;
-    item.addEventListener('click', () => selectSlide(index));
-    item.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectSlide(index); } });
+    item.addEventListener('click', () => { selectSlide(index); focusThumbnail(); });
+    item.addEventListener('keydown', event => {
+      if (event.isComposing) return;
+      let destination = index;
+      let action;
+      switch (event.key) {
+        case 'ArrowUp': destination = Math.max(0, index - 1); break;
+        case 'ArrowDown': destination = Math.min(deck.slides.length - 1, index + 1); break;
+        case 'Delete': case 'Backspace': action = 'delete-slide'; break;
+        case 'd': case 'D':
+          if (!event.ctrlKey && !event.metaKey) return;
+          action = 'duplicate-slide'; break;
+        case 'Enter': case ' ': break;
+        default: return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      selectSlide(destination);
+      focusThumbnail();
+      if (action) actions[action]();
+    });
     item.addEventListener('dragstart', event => { finishEditing(); draggedSlide = s.id; event.dataTransfer.setData('text/plain', s.id); event.dataTransfer.effectAllowed = 'move'; });
     item.addEventListener('dragover', event => { if (draggedSlide) { event.preventDefault(); item.classList.add('drag-over'); } });
     item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
@@ -109,8 +131,10 @@ function renderRail() {
       commit(() => { const active = currentSlide().id; const from = deck.slides.findIndex(v => v.id === sourceId); const to = deck.slides.findIndex(v => v.id === s.id); const [moved] = deck.slides.splice(from, 1); deck.slides.splice(to, 0, moved); current = deck.slides.findIndex(v => v.id === active); });
     });
   });
+  if (hadFocus) focusThumbnail();
   $('page-status').textContent = `${current + 1} / ${deck.slides.length}`;
 }
+function focusThumbnail() { $('slide-list').querySelector('.slide-item.active')?.focus(); }
 function textSummary(e) {
   if (e.type !== 'text') return { image: '画像', rect: '四角形', ellipse: '円・楕円', line: '線' }[e.type];
   const walk = node => node.type === 'text' ? node.text : (node.content || []).map(walk).join('');
@@ -134,14 +158,37 @@ function updateHistory() {
 function updateProperties() {
   const items = selection(), first = items[0];
   $('element-properties').disabled = !first;
+  $('element-options').disabled = !first && !clipboard;
   $('selection-heading').textContent = first ? (items.length === 1 ? textSummary(first).slice(0, 15) : '複数の要素') : 'スライドの設定';
   $('selection-count').textContent = first ? `${items.length}個を選択中${first.group ? ' · グループ' : ''}` : '要素を選択してください';
   const geometry = items.length > 1 ? { ...first, ...bounds(items) } : first;
   for (const prop of ['x', 'y', 'width', 'height', 'rotation', 'opacity', 'lineHeight']) $('prop-' + prop).value = geometry ? Math.round(geometry[prop] * 100) / 100 : '';
-  if (first) {
-    $('shape-fill').value = first.fill; $('image-fit').value = first.fit || 'contain';
-    if (first.type === 'text' && !editor) { $('font-size').value = first.fontSize; $('font-family').value = first.fontFamily; $('text-color').value = first.color; }
+  const shape = items.find(e => C.isTextShape(e.type));
+  const filled = items.find(e => C.isTextShape(e.type) || e.type === 'line');
+  const text = items.find(e => C.supportsText(e.type));
+  const image = items.find(e => e.type === 'image');
+  $('shape-fill').closest('label').hidden = !filled;
+  $('shape-outline').hidden = !shape;
+  $('vertical-align').closest('label').hidden = !text;
+  $('prop-lineHeight').closest('label').hidden = !text;
+  $('image-fit').closest('label').hidden = !image;
+  if (filled) $('shape-fill').value = filled.fill;
+  if (shape) {
+    $('shape-stroke').value = shape.stroke;
+    $('shape-stroke-width').value = shape.strokeWidth;
+    $('shape-no-fill').checked = shape.noFill;
+    $('shape-no-fill').indeterminate = items.some(e => C.isTextShape(e.type) && e.noFill !== shape.noFill);
   }
+  if (text) {
+    $('vertical-align').value = text.verticalAlign;
+    $('prop-lineHeight').value = text.lineHeight;
+    if (!editor) {
+      $('font-size').value = text.fontSize;
+      $('font-family').value = text.fontFamily;
+      $('text-color').value = text.color;
+    }
+  }
+  if (image) $('image-fit').value = image.fit;
   $('slide-name').value = currentSlide().name;
   $('background-color').value = currentSlide().background;
   $('current-slide-name').textContent = currentSlide().name;
@@ -173,7 +220,7 @@ function render() {
 function selectSlide(index) { finishEditing(); current = index; selected.clear(); render(); }
 function startEditing(id) {
   const data = currentSlide().elements.find(e => e.id === id);
-  if (!data || data.type !== 'text' || editingId === id) return;
+  if (!data || !C.supportsText(data.type) || editingId === id) return;
   finishEditing(); selected = new Set([id]); editingId = id;
   const node = nodeFor(id); node.classList.add('editing'); node.replaceChildren();
   editor = new Editor({
@@ -183,7 +230,7 @@ function startEditing(id) {
     editorProps: { attributes: { 'aria-label': 'テキスト編集', spellcheck: 'false' }, handleKeyDown: (_view, event) => {
       if (event.isComposing || _view.composing) return false;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undo(event.shiftKey); return true; }
-      if (event.key === 'Escape') { event.preventDefault(); finishEditing(); canvas.focus(); return true; }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finishEditing(); canvas.focus(); return true; }
       return false;
     } },
     onUpdate: ({ editor: instance }) => {
@@ -212,7 +259,7 @@ function format(command, value) {
     const methods = { bold: 'toggleBold', italic: 'toggleItalic', underline: 'toggleUnderline', bullet: 'toggleBulletList', color: 'setColor', fontFamily: 'setFontFamily', fontSize: 'setFontSize', textAlign: 'setTextAlign' };
     chain[methods[command]](command === 'fontSize' ? `${value}px` : value).run(); editor.view.focus(); updateTextToolbar(); return;
   }
-  const text = selection().filter(e => e.type === 'text');
+  const text = selection().filter(e => C.supportsText(e.type));
   if (!text.length) { notify('テキストを選択してください。部分書式はダブルクリックして文字を選択します。'); return; }
   commit(() => text.forEach(e => {
     if (['fontSize', 'fontFamily', 'color'].includes(command)) {
@@ -252,10 +299,79 @@ function addSlide(s = C.slide()) {
   if (deck.slides.length >= 500) return notify('スライドは500枚までです。', true);
   commit(() => { deck.slides.splice(current + 1, 0, s); current++; selected.clear(); });
 }
-function duplicateSelection() {
-  finishEditing(); const items = C.clone(selection());
-  const groups = new Map(); items.forEach(e => { e.id = C.id(); e.x += 24; e.y += 24; if (e.group) { if (!groups.has(e.group)) groups.set(e.group, C.id()); e.group = groups.get(e.group); } });
-  if (items.length) addElements(items);
+function insertCopies(source) {
+  if (!source?.length) return;
+  const items = C.clone(source), groups = new Map();
+  for (const item of items) {
+    item.id = C.id();
+    item.x += 24;
+    item.y += 24;
+    if (item.group) {
+      if (!groups.has(item.group)) groups.set(item.group, C.id());
+      item.group = groups.get(item.group);
+    }
+  }
+  addElements(items);
+}
+function copySelection() {
+  if (!selected.size) return;
+  finishEditing();
+  clipboard = C.clone(selection());
+}
+function styleKeys(type) {
+  const keys = ['opacity'];
+  if (C.supportsText(type)) keys.push('fontSize', 'fontFamily', 'color', 'verticalAlign', 'lineHeight');
+  if (C.isTextShape(type) || type === 'line') keys.push('fill');
+  if (C.isTextShape(type)) keys.push('noFill', 'stroke', 'strokeWidth');
+  if (type === 'image') keys.push('fit');
+  return keys;
+}
+function visitContent(node, visit) {
+  visit(node);
+  for (const child of node.content || []) visitContent(child, visit);
+}
+function copyStyle() {
+  if (selected.size !== 1) return;
+  finishEditing();
+  const [source] = selection();
+  const properties = Object.fromEntries(styleKeys(source.type).map(key => [key, source[key]]));
+  copiedStyle = { properties };
+  if (source.content) {
+    visitContent(source.content, node => {
+      if (node.type === 'paragraph') copiedStyle.align ??= node.attrs?.textAlign || 'left';
+      if (node.type === 'text') copiedStyle.marks ??= C.clone(node.marks || []);
+    });
+  }
+  notify('書式をコピーしました。適用先で「書式を貼り付け」を選んでください。');
+}
+function pasteStyle() {
+  if (!copiedStyle || !selected.size) return;
+  commit(() => {
+    for (const target of selection()) {
+      for (const key of styleKeys(target.type)) {
+        if (key in copiedStyle.properties) target[key] = copiedStyle.properties[key];
+      }
+      if (target.content && copiedStyle.align) {
+        visitContent(target.content, node => {
+          if (node.type === 'paragraph') node.attrs = { ...node.attrs, textAlign: copiedStyle.align };
+          if (node.type === 'text') node.marks = C.clone(copiedStyle.marks || []);
+        });
+      }
+    }
+  });
+}
+function moveOneLayer(direction) {
+  const order = [...currentSlide().elements];
+  // Work from the leading edge so adjacent selected items move as a block.
+  let moved = false;
+  for (let i = direction > 0 ? order.length - 2 : 1; i >= 0 && i < order.length; i -= direction) {
+    const next = i + direction;
+    if (selected.has(order[i].id) && !selected.has(order[next].id)) {
+      [order[i], order[next]] = [order[next], order[i]];
+      moved = true;
+    }
+  }
+  if (moved) commit(() => { currentSlide().elements = order; });
 }
 function align(direction) {
   const items = units(selection()); if (!items.length) return;
@@ -316,7 +432,7 @@ function present() {
   const host = bridge();
   if (host) { host.receive(published); $('projection-state').textContent = `${current + 1}枚目を投影へ反映しました`; return; }
   if (!standaloneWindow || standaloneWindow.closed) {
-    standaloneWindow = window.open('./present.html?v=1', 'assembly-slides-projector', 'width=1280,height=720,resizable=yes');
+    standaloneWindow = window.open('./present.html?v=2', 'assembly-slides-projector', 'width=1280,height=720,resizable=yes');
     if (!standaloneWindow) return notify('投影画面を開けません。ポップアップを許可してください。', true);
     standaloneWindow.focus();
     standaloneWindow.addEventListener('load', () => { standaloneWindow.SlideShow?.apply(published); });
@@ -356,7 +472,25 @@ const actions = {
   import: () => { finishEditing(); $('import-file').click(); }, export: exportDeck,
   'add-slide': () => addSlide(),
   'duplicate-slide': () => { const s = C.clone(currentSlide()); s.id = C.id(); s.name += ' のコピー'; const groups = new Map(); s.elements.forEach(e => { e.id = C.id(); if (e.group) { if (!groups.has(e.group)) groups.set(e.group, C.id()); e.group = groups.get(e.group); } }); addSlide(s); },
-  'delete-slide': () => { if (deck.slides.length === 1) return notify('最後の1枚は削除できません。'); if (confirm('このスライドを削除しますか？')) commit(() => { deck.slides.splice(current, 1); current = Math.min(current, deck.slides.length - 1); selected.clear(); }); },
+  'delete-slide': () => {
+    const last = deck.slides.length === 1;
+    $('delete-description').textContent = `${current + 1} 枚目「${currentSlide().name}」を削除します。${last ? '最後の1枚なので、編集用の白紙を1枚用意します。' : ''}「元に戻す」で復元できます。`;
+    $('delete-dialog').dataset.slideId = currentSlide().id;
+    $('delete-dialog').showModal();
+  },
+  'confirm-delete-slide': () => {
+    const dialog = $('delete-dialog');
+    const index = deck.slides.findIndex(s => s.id === dialog.dataset.slideId);
+    dialog.close();
+    if (index < 0) return;
+    commit(() => {
+      deck.slides.splice(index, 1);
+      if (!deck.slides.length) deck.slides.push(C.slide('白紙'));
+      current = Math.min(index, deck.slides.length - 1);
+      selected.clear();
+    });
+    focusThumbnail();
+  },
   'slide-up': () => { if (current > 0) commit(() => { const [s] = deck.slides.splice(current, 1); deck.slides.splice(--current, 0, s); }); },
   'slide-down': () => { if (current < deck.slides.length - 1) commit(() => { const [s] = deck.slides.splice(current, 1); deck.slides.splice(++current, 0, s); }); },
   'add-text': () => { const e = C.element('text', { content: C.textDoc('テキストを入力') }); addElements([e]); startEditing(e.id); editor?.commands.selectAll(); },
@@ -364,12 +498,17 @@ const actions = {
   'background-image': () => { imagePurpose = 'background'; $('image-file').click(); },
   'clear-background': () => commit(() => { delete currentSlide().backgroundImage; }),
   'add-rect': () => addElements([C.element('rect')]), 'add-ellipse': () => addElements([C.element('ellipse')]), 'add-line': () => addElements([C.element('line', { width: 500, height: 8, fill: '#15574b' })]),
-  duplicate: duplicateSelection,
+  duplicate: () => { finishEditing(); insertCopies(selection()); },
+  copy: () => { copySelection(); notify('要素をコピーしました。'); },
+  cut: () => { copySelection(); actions.delete(); },
+  paste: () => insertCopies(clipboard),
+  'copy-style': copyStyle, 'paste-style': pasteStyle,
   delete: () => { if (selected.size) commit(() => { currentSlide().elements = currentSlide().elements.filter(e => !selected.has(e.id)); selected.clear(); }); },
   bold: () => format('bold'), italic: () => format('italic'), underline: () => format('underline'), bullet: () => format('bullet'),
   'align-text-left': () => format('textAlign', 'left'), 'align-text-center': () => format('textAlign', 'center'), 'align-text-right': () => format('textAlign', 'right'),
   'align-left': () => align('left'), 'align-center': () => align('center'), 'align-right': () => align('right'), 'align-top': () => align('top'), 'align-middle': () => align('middle'), 'align-bottom': () => align('bottom'),
   'distribute-x': () => distribute('x'), 'distribute-y': () => distribute('y'),
+  forward: () => moveOneLayer(1), backward: () => moveOneLayer(-1),
   front: () => commit(() => { const chosen = selection(); currentSlide().elements = [...currentSlide().elements.filter(e => !selected.has(e.id)), ...chosen]; }),
   back: () => commit(() => { const chosen = selection(); currentSlide().elements = [...chosen, ...currentSlide().elements.filter(e => !selected.has(e.id))]; }),
   group: () => { if (selected.size < 2) return notify('2個以上の要素を選択してください。'); commit(() => { const group = C.id(); selection().forEach(e => { e.group = group; }); }); },
@@ -388,7 +527,7 @@ function zoom(delta) {
 
 // Keep manipulation controls outside the canvas so they cannot enter a projection.
 const moveable = new Moveable(space, {
-  container: space, target: [], draggable: false, resizable: true, rotatable: true, origin: false,
+  container: space, target: [], draggable: false, passDragArea: true, resizable: true, rotatable: true, origin: false,
   snappable: true, snapThreshold: 6, snapDirections: { top: true, left: true, right: true, bottom: true, center: true, middle: true },
   elementSnapDirections: { top: true, left: true, right: true, bottom: true, center: true, middle: true },
   verticalGuidelines: [0, 640, 1280], horizontalGuidelines: [0, 360, 720], snapContainer: canvas,
@@ -478,6 +617,7 @@ canvas.addEventListener('pointerdown', event => {
     const id = node.dataset.elementId;
     if (event.shiftKey) { choose([id], true); return; }
     if (!selected.has(id)) choose([id]);
+    canvas.focus({ preventScroll: true });
     event.preventDefault(); event.stopPropagation();
     pointerMove = { id: event.pointerId, x: event.clientX, y: event.clientY, items: selection().map(e => ({ id: e.id, x: e.x, y: e.y, width: e.width, height: e.height })) };
     gesture = true;
@@ -525,6 +665,70 @@ document.addEventListener('click', event => {
   const layout = event.target.closest('[data-template]')?.dataset.template;
   if (layout && ready) addSlide(template(layout));
 });
+const elementMenu = $('element-menu');
+const optionsButton = $('element-options');
+let menuTrigger = canvas;
+function closeElementMenu(restoreFocus = false) {
+  if (elementMenu.hidden) return;
+  elementMenu.hidden = true;
+  optionsButton.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) menuTrigger.focus({ preventScroll: true });
+}
+function openElementMenu(x, y, trigger) {
+  finishEditing();
+  menuTrigger = trigger;
+  const count = selected.size;
+  const enabled = {
+    paste: !!clipboard, 'copy-style': count === 1, 'paste-style': count > 0 && !!copiedStyle,
+    group: units(selection()).length > 1, ungroup: selection().some(e => e.group)
+  };
+  for (const button of elementMenu.querySelectorAll('button')) {
+    button.disabled = !(enabled[button.dataset.action] ?? (count > 0));
+  }
+  elementMenu.hidden = false;
+  optionsButton.setAttribute('aria-expanded', 'true');
+  elementMenu.style.left = Math.max(4, Math.min(x, innerWidth - elementMenu.offsetWidth - 4)) + 'px';
+  elementMenu.style.top = Math.max(4, Math.min(y, innerHeight - elementMenu.offsetHeight - 4)) + 'px';
+  elementMenu.querySelector('button:enabled')?.focus();
+}
+optionsButton.addEventListener('click', () => {
+  if (!elementMenu.hidden) return closeElementMenu(true);
+  const box = optionsButton.getBoundingClientRect();
+  openElementMenu(box.left, box.bottom, optionsButton);
+});
+canvas.addEventListener('contextmenu', event => {
+  if (event.target.closest('.editing') || gesture) return;
+  const node = event.target.closest('.slide-element');
+  if (!node && !clipboard) return;
+  event.preventDefault();
+  finishEditing();
+  if (!node) choose([]);
+  else if (!selected.has(node.dataset.elementId)) choose([node.dataset.elementId]);
+  openElementMenu(event.clientX, event.clientY, canvas);
+});
+canvas.addEventListener('keydown', event => {
+  if (event.target !== canvas || !selected.size || !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) return;
+  event.preventDefault();
+  const rect = nodeFor(selection()[0].id).getBoundingClientRect();
+  openElementMenu(rect.left, rect.top, canvas);
+});
+elementMenu.addEventListener('keydown', event => {
+  event.stopPropagation();
+  if (event.key === 'Escape') { event.preventDefault(); closeElementMenu(true); return; }
+  if (event.key === 'Tab') { closeElementMenu(true); return; }
+  const buttons = [...elementMenu.querySelectorAll('button:enabled')];
+  const index = buttons.indexOf(document.activeElement);
+  const next = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: buttons.length - 1 }[event.key];
+  if (next !== undefined && buttons.length) {
+    event.preventDefault(); buttons[(next + buttons.length) % buttons.length].focus();
+  }
+});
+elementMenu.addEventListener('click', event => { if (event.target.closest('button:enabled')) closeElementMenu(true); });
+document.addEventListener('pointerdown', event => {
+  if (!elementMenu.contains(event.target) && !optionsButton.contains(event.target)) closeElementMenu();
+});
+window.addEventListener('blur', () => closeElementMenu());
+window.addEventListener('resize', () => closeElementMenu());
 document.querySelector('[role=tablist]').addEventListener('keydown', event => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
   const tabs = Array.from(document.querySelectorAll('[data-tab]')), index = tabs.indexOf(document.activeElement);
@@ -536,7 +740,18 @@ $('font-family').addEventListener('change', () => format('fontFamily', $('font-f
 $('font-size').addEventListener('change', () => format('fontSize', C.number($('font-size').value, 44, 8, 240)));
 $('text-color').addEventListener('input', () => format('color', $('text-color').value));
 $('background-color').addEventListener('change', () => { const value = $('background-color').value; commit(() => { currentSlide().background = value; }); });
-$('shape-fill').addEventListener('change', () => { const value = $('shape-fill').value; commit(() => selection().filter(e => !['text', 'image'].includes(e.type)).forEach(e => { e.fill = value; })); });
+$('shape-fill').addEventListener('change', () => { const value = $('shape-fill').value; commit(() => selection().filter(e => !['text', 'image'].includes(e.type)).forEach(e => { e.fill = value; if (C.isTextShape(e.type)) e.noFill = false; })); });
+for (const [id, prop] of [['shape-stroke', 'stroke'], ['shape-stroke-width', 'strokeWidth'], ['shape-no-fill', 'noFill'], ['vertical-align', 'verticalAlign']]) {
+  $(id).addEventListener('change', () => {
+    const input = $(id);
+    const value = input.type === 'checkbox' ? input.checked : input.type === 'number' ? C.number(input.value, 0, 0, 24) : input.value;
+    const targets = selection().filter(e => prop === 'verticalAlign' ? C.supportsText(e.type) : C.isTextShape(e.type));
+    if (targets.length) commit(() => targets.forEach(e => {
+      e[prop] = value;
+      if (prop === 'stroke' && !e.strokeWidth) e.strokeWidth = 1;
+    }));
+  });
+}
 $('image-fit').addEventListener('change', () => { const value = $('image-fit').value; commit(() => selection().filter(e => e.type === 'image').forEach(e => { e.fit = value; })); });
 document.querySelectorAll('[data-prop]').forEach(input => input.addEventListener('change', () => {
   const value = C.number(input.value, 0, Number(input.min), Number(input.max));
@@ -590,12 +805,15 @@ document.addEventListener('keydown', event => {
   const mod = event.ctrlKey || event.metaKey, key = event.key.toLowerCase();
   if (mod && key === 's') { event.preventDefault(); exportDeck(); return; }
   if (input) return;
+  if (event.key === 'F2' && selected.size === 1 && C.supportsText(selection()[0].type)) {
+    event.preventDefault(); startEditing(selection()[0].id); return;
+  }
   if (mod && key === 'z') { event.preventDefault(); undo(event.shiftKey); }
   else if (mod && key === 'y') { event.preventDefault(); undo(true); }
   else if (mod && key === 'a') { event.preventDefault(); choose(currentSlide().elements.map(e => e.id)); }
-  else if (mod && key === 'd') { event.preventDefault(); duplicateSelection(); }
-  else if (mod && key === 'c') { if (selected.size) { event.preventDefault(); clipboard = C.clone(selection()); notify('要素をコピーしました。'); } }
-  else if (mod && key === 'v' && clipboard) { event.preventDefault(); const items = C.clone(clipboard), groups = new Map(); items.forEach(e => { e.id = C.id(); e.x += 24; e.y += 24; if (e.group) { if (!groups.has(e.group)) groups.set(e.group, C.id()); e.group = groups.get(e.group); } }); addElements(items); }
+  else if (mod && key === 'd') { event.preventDefault(); actions.duplicate(); }
+  else if (mod && (key === 'c' || key === 'x') && selected.size) { event.preventDefault(); actions[key === 'c' ? 'copy' : 'cut'](); }
+  else if (mod && key === 'v' && clipboard) { event.preventDefault(); actions.paste(); }
   else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); actions.delete(); }
   else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && selected.size) { event.preventDefault(); const step = event.shiftKey ? 10 : 1; commit(() => selection().forEach(e => { if (event.key === 'ArrowLeft') e.x -= step; if (event.key === 'ArrowRight') e.x += step; if (event.key === 'ArrowUp') e.y -= step; if (event.key === 'ArrowDown') e.y += step; })); }
   else if (event.key === 'PageDown') { event.preventDefault(); navigate(1); }
